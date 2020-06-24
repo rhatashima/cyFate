@@ -3,17 +3,19 @@
 set -e
 # cyfate version
 VERSION="0.1"
+PROGNAME=$(basename $0)
 
 # default arguments
 STHREADS=1
 FTHREADS=1
-NCYCLE=30
+NCYCLE=1
 SAMPLE=sample
 GENE=gene
+INPUT=()
 
 # functions for version and help
 print_version(){
-  echo "cyFate version $VERSION using" `fate.pl 2>&1 1>/dev/null | awk 'NR==1 { print $0 }'`
+  echo "$PROGNAME version $VERSION using" `fate.pl 2>&1 1>/dev/null | awk 'NR==1 { print $0 }'`
 }
 
 print_help(){
@@ -22,12 +24,11 @@ Usage:
 cyFate [options] <genome.fna> <query.fa> <protein.faa> <keyword>
 
 cyFate options:
---sthreads INT     Number of threads for search
---fthreads INT     Number of threads for filter
---gene STR         Gene name
---sample STR       Sample name
-
-Extra arguments (-g, -v, etc) will be passed through
+--sthreads INT     Number of threads for search [1]
+--fthreads INT     Number of threads for filter [1]
+--cycle INT        Number of cycle [1]
+--gene STR         Gene name [gene]
+--sample STR       Sample name [sample]
 
 Other:
 -v|--version         show version info
@@ -58,7 +59,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --fthreads)
-      STHREADS=${2}
+      FTHREADS=${2}
       shift
       ;;
     --sample)
@@ -71,18 +72,21 @@ while [[ $# -gt 0 ]]; do
       ;;
     -*|--*)
       OPTIONS="${OPTIONS} ${1}"
-      # OPTIONS="${OPTIONS} ${1} ${2}"
       ;;
     *)
-      OPTIONS="${OPTIONS} ${1}"
+      INPUT=("${INPUT[@]}" "${1}")
   esac
   shift
 done
 
-SUBJECT=${OPTIONS[0]}
-QUERY=${OPTIONS[1]}
-PROTEIN=${OPTIONS[2]}
-KEYWORD=${OPTIONS[3]}
+SUBJECT=${INPUT[0]}
+echo "Genome: $SUBJECT"
+QUERY=${INPUT[1]}
+echo "Query: $QUERY"
+PROTEIN=${INPUT[2]}
+echo "Protein: $PROTEIN"
+KEYWORD=${INPUT[3]}
+echo "Keyword: $KEYWORD"
 
 # echo $subject
 echo "cyFate of ${SAMPLE} start"
@@ -98,7 +102,7 @@ for ((ncycle=1; ncycle<${NCYCLE}+1; ncycle++)); do
 	cd cycle_${ncycle}
 
 	if [ ${ncycle} = 1 ]; then
-		fate.pl search -p ${STHREADS} -h tblastn -g genewise -i 5000 -o 60 -v 1 -x -s ${SUBJECT} ${QUERY} > ${output}.bed || exit
+    fate.pl search -p ${STHREADS} -h tblastn -g genewise -i 5000 -o 60 -v 1 -x -s ${SUBJECT} ${QUERY} > ${output}.bed
 	else
 		fate.pl search -p ${STHREADS} -h tblastn -g genewise -i 5000 -o 60 -v 1 -x -s ${SUBJECT} ../${output}_cycle$((ncycle-1))_filter_blue_aa.fasta > ${output}.bed || exit
 	fi

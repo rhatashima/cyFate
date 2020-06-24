@@ -2,7 +2,7 @@
 
 set -e
 # cyfate version
-VERSION="0.1"
+VERSION="0.2"
 PROGNAME=$(basename $0)
 
 # default arguments
@@ -21,18 +21,22 @@ print_version(){
 print_help(){
   cat <<EOS
 Usage:
-cyFate [options] <genome.fna> <query.fa> <protein.faa> <keyword>
+$PROGNAME [options] <genome.fna> <query.fa> <protein.faa> <keyword>
 
-cyFate options:
+$PROGNAME options:
 --sthreads INT     Number of threads for search [1]
 --fthreads INT     Number of threads for filter [1]
 --cycle INT        Number of cycle [1]
 --gene STR         Gene name [gene]
 --sample STR       Sample name [sample]
 
+If you'd like to use additional options for search or filter, you can put -s* or -f*.
+Example: For "-v 1" in search, you can put "-sv 1"
+         For "-t 1" in filter, you can put "-ft 1"
+
 Other:
--v|--version         show version info
--h|--help            program usage
+-v|--version       show version info
+-h|--help          program usage
 
 For more information, see fate.pl
 EOS
@@ -41,7 +45,7 @@ EOS
 # parse arguments
 while [[ $# -gt 0 ]]; do
   key=${1}
-  case ${key} in
+  case $key in
     -v|--version)
       print_version
       exit 0
@@ -70,8 +74,11 @@ while [[ $# -gt 0 ]]; do
       GENE="${2}"
       shift
       ;;
-    -*|--*)
-      OPTIONS="${OPTIONS} ${1}"
+    -s*)
+      SOPTION="${SOPTION} -${key:2:3} ${2}"
+      ;;
+    -f*)
+      FOPTION="${FOPTION} -${key:2:3} ${2}"
       ;;
     *)
       INPUT=("${INPUT[@]}" "${1}")
@@ -88,12 +95,15 @@ echo "Protein: $PROTEIN"
 KEYWORD=${INPUT[3]}
 echo "Keyword: $KEYWORD"
 
+if [ "${SOPTION}" ]; then echo "Additional options for search:$SOPTION"; fi
+if [ "${FOPTION}" ]; then echo "Additional options for filter:$FOPTION"; fi
+
 # echo $subject
-echo "cyFate of ${SAMPLE} start"
+echo "cyfate of ${SAMPLE} start"
 mkdir -p ${SAMPLE}_cyFate
 cd ${SAMPLE}_cyFate
 
-output=${SAMPLE}_${GENE}_i5000_o60_all
+output=${SAMPLE}_${GENE}
 
 for ((ncycle=1; ncycle<${NCYCLE}+1; ncycle++)); do
 
@@ -102,15 +112,15 @@ for ((ncycle=1; ncycle<${NCYCLE}+1; ncycle++)); do
 	cd cycle_${ncycle}
 
 	if [ ${ncycle} = 1 ]; then
-    fate.pl search -p ${STHREADS} -h tblastn -g genewise -i 5000 -o 60 -v 1 -x -s ${SUBJECT} ${QUERY} > ${output}.bed
+    fate.pl search -p ${STHREADS} -h tblastn -g genewise -x -v 1 -s ${SOPTION} ${SUBJECT} ${QUERY} > ${output}.bed
 	else
-		fate.pl search -p ${STHREADS} -h tblastn -g genewise -i 5000 -o 60 -v 1 -x -s ${SUBJECT} ../${output}_cycle$((ncycle-1))_filter_blue_aa.fasta > ${output}.bed || exit
+		fate.pl search -p ${STHREADS} -h tblastn -g genewise -x -v 1 -s ${SOPTION} ${SUBJECT} ../${output}_cycle$((ncycle-1))_filter_blue_aa.fasta > ${output}.bed || exit
 	fi
 
 	# awk '$9~/0,0,255/{print$0}' ${output}.bed > ${output}_blue.bed
 	# bedtools getfasta -fi ${subject} -bed ${output}_blue.bed -s -split -fo ${output}_blue.fasta
 
-	fate.pl filter -p ${FTHREADS} -d ${PROTEIN} -x -h blastx -k "${KEYWORD}" -r 10 ${SUBJECT} ${output}.bed > ${output}_filter.bed || exit
+	fate.pl filter -p ${FTHREADS} -d ${PROTEIN} -x -h blastx -k "${KEYWORD}" -r 10 ${FOPTION} ${SUBJECT} ${output}.bed > ${output}_filter.bed || exit
 	awk '$9~/0,0,255/{print$0}' ${output}_filter.bed > ${output}_filter_blue.bed
 	bedtools getfasta -fi ${SUBJECT} -bed ${output}_filter_blue.bed -s -split -fo ${output}_filter_blue.fasta
 		
@@ -126,7 +136,8 @@ for ((ncycle=1; ncycle<${NCYCLE}+1; ncycle++)); do
 		rm -r ./cycle_$((ncycle-1))
 		rm ./${output}_cycle$((ncycle-1))_filter_blue_aa.fasta
 	fi
+
 done
 
 cd ../
-echo "cyFate of ${SAMPLE} finish"
+echo "cyfate of ${SAMPLE} finish"
